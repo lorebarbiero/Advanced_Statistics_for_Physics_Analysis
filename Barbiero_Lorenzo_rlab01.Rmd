@@ -1,0 +1,297 @@
+---
+title: "Barbiero_Lorenzo_rlab01"
+author: "Barbiero Lorenzo"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+EXERCISE 1  
+
+```{r}
+library(tidyverse)
+```
+
+1.1)
+Import data
+
+```{r}
+american <- read.csv('employees/american_airline_empl.txt', sep= "\t", header=TRUE)
+
+delta <- read.csv('employees/delta_airline_empl.txt', sep= "\t", header=TRUE)
+
+federal <- read.csv('employees/federal_express_empl.txt', sep= "\t", header=TRUE)
+
+united <- read.csv('employees/united_airline_empl.txt', sep= "\t", header=TRUE)
+```
+
+1.2)
+Merge all data into a single frame while adding a date column, a company name column and fixing data types for the number of employees (from chr to num)
+
+```{r}
+american$company <- 'American'
+delta$company <- 'Delta'
+federal$company <- 'Federal'
+united$company <- 'United'
+
+airlines <- bind_rows(american,delta,federal,united)
+airlines$date <- make_date(year = airlines$Year, month = airlines$Month)
+
+airlines$Full.time <- as.numeric(gsub(",", "", airlines$Full.time))
+airlines$Part.time <- as.numeric(gsub(",", "", airlines$Part.time))
+airlines$Grand.Total <- as.numeric(gsub(",", "", airlines$Grand.Total))
+
+str(airlines)
+```
+Now all entries have the correct data structure and type so we can start managing them
+
+1.3)
+
+Plot the number of full time employees overtime for all the companies
+
+```{r}
+p <- ggplot(airlines,aes(x = date, y = Full.time, color=company)) + 
+   geom_point() +
+  labs(x = "Year", y = "# full time emp.")
+p
+```
+
+Plot the number of part time employees overtime for all the companies
+
+```{r}
+p <- ggplot(airlines,aes(x = date, y = Part.time, color=company)) + 
+   geom_point() +
+  labs(x = "Year", y = "# part time emp.")
+p
+```
+
+1.4)
+We now search for the maximum and minimum number of total employees for each company
+
+```{r}
+maxnum <- airlines[,c("date","company","Full.time")] |> arrange(company, - Full.time) |> group_by(company) |> slice(1)
+maxnum
+```
+
+```{r}
+minnum <- airlines[,c("date","company","Full.time")] |> arrange(company, Full.time) |> group_by(company) |> slice(1)
+minnum
+```
+
+1.5)
+Plot fraction of part time employees
+
+```{r}
+p <- ggplot(airlines, aes(x=date, y=Part.time/Grand.Total))+
+    geom_point(aes(color=company)) + geom_smooth(aes(color= company, fill=company), lwd=0.8) +  labs(x = "Year", y = "part time emp. ratio")
+p
+```
+
+1.6)
+We will start by restricting the metrics to the years 2019-2023 then, for each company we will plot the full number of employees along with the ratio between part and full time
+
+```{r}
+p <- ggplot(airlines[airlines$Year>2018,],aes(x = date, y = Grand.Total, group= company, color=company)) + 
+   geom_line() + geom_point()
+p
+```
+
+It's interesting to note how passenger oriented airlines somewhat experienced a decline in employees in 2020 before going back to the previous values while FedEx, being cargo based, actually saw an increase in the number of employees in the same time frame.
+
+```{r}
+p <- ggplot(airlines[airlines$Year>2018,], aes(x=date, y=Part.time/Grand.Total))+
+    geom_point(aes(color=company)) + geom_smooth(aes(color= company, fill=company), lwd=0.8)
+p
+```
+
+Regarding the ratio it's more difficult to establish a global trend, overall comparing it to the general plots the behavior is similar to what was observed before COVID.
+
+EXERCISE 2
+
+```{r}
+require(nycflights13)
+```
+
+Data manipulation
+
+```{r}
+flights$date <- make_date(year = flights$year, month = flights$month, day = flights$day)
+flights$weekday <- wday(flights$date, week_start=1)
+flights$weeknum <- isoweek(ymd(flights$date))
+flights$daynum <- yday(flights$date)
+```
+
+2.1)
+Plot the number of flights per day per airport
+
+```{r}
+numflights <- flights |> count(date, origin) |> arrange(date,- n) |> group_by(date)
+
+p <- ggplot(numflights, aes(x=date, y=n, colour=origin)) + 
+      geom_point(size = 0.5)+
+      geom_smooth(aes(fill=origin), lwd=0.8) +
+  labs(x = "Date", y = "avg #flights")
+p
+```
+
+2.2)
+We'll start by plotting the average number of flights per weekday per airport
+
+```{r}
+y <- flights |> count(weekday,weeknum,origin) |> group_by(weekday,origin) |> summarise(n=mean(n))
+
+p <- ggplot(y, aes(x=weekday, y=n, colour=origin)) + 
+      geom_line(lwd=0.8) + geom_point() +
+  labs(x = "Day of the week", y = "avg flights")
+p
+```
+
+At least for JFK and LGA there seems to be a sensible decline of flights at saturdays
+
+We will now look for the average number of flights in the weekdays (mon-fri) over the weeks
+
+```{r}
+meanwk <- flights[flights$weekday<6,] |> count(daynum, weeknum, origin) |> group_by(weeknum,origin) |> summarise(n=mean(n))
+
+p <- ggplot(meanwk, aes(x=weeknum, y=n, fill=origin, colour=origin)) + geom_line(lwd=0.8) +
+   labs(x = "Week Number", y = "avg flights Mon-Fri")
+p
+```
+
+There are three very distinct negative spikes for weeks number 27 (Independence day in the US), 48 (Thanksgiving day) and 52 (New year's eve)
+
+And now the same for weekends
+
+```{r}
+meanwe <- flights[flights$weekday>5,] |> count(daynum, weeknum, origin) |> group_by(weeknum,origin) |> summarise(n=mean(n))
+
+p <- ggplot(meanwe, aes(x=weeknum, y=n, fill=origin, colour=origin)) + geom_line(lwd=0.8) +
+  labs(x = "Week Number", y = "avg flights Sat-Sun")
+p
+```
+
+There are two negative spikes for weeks 21, 35 and a positive one at week 48 (Thanksgiving)
+
+2.3)
+We'll analyze mean, max and min daily delay at each airport 
+
+Mean delay
+
+```{r}
+filtered <- flights |> filter(!is.na(dep_delay))
+
+meandel <- filtered |> group_by(date, origin) |> summarise(dep_delay = mean(dep_delay))
+
+p <- ggplot(meandel, aes(x=date, y=dep_delay, colour=origin)) + 
+      geom_point(size=0.4) + geom_smooth(aes(fill=origin), lwd=0.8)+
+  labs(x = "Date", y = "mean departure delay [min]")
+p
+```
+
+Max delay
+
+```{r}
+filtered <- flights |> filter(!is.na(dep_delay))
+
+maxdel <- filtered |> group_by(date, origin) |> summarise(dep_delay = max(dep_delay))
+
+p <- ggplot(maxdel, aes(x=date, y=dep_delay, colour=origin)) + 
+      geom_point(size=0.4) + geom_smooth(aes(fill=origin), lwd=0.8) +
+  labs(x = "Date", y = "max departure delay [min]")
+p
+```
+
+Min delay
+
+```{r}
+filtered <- flights |> filter(!is.na(dep_delay))
+
+mindel <- filtered |> group_by(date, origin) |> summarise(dep_delay = min(dep_delay))
+
+p <- ggplot(mindel, aes(x=date, y=dep_delay, colour=origin)) + 
+       geom_point(size=0.4) + geom_smooth(aes(fill=origin), lwd=0.8) +
+  labs(x = "Date", y = "min departure delay [min]")
+p
+```
+
+2.4)
+We'll compute average daily speeds for planes in km/h
+
+```{r}
+filtered <- flights |> filter(!is.na(distance) & !is.na(air_time))
+
+filtered$speed <- (filtered$distance * 1.60934) / (filtered$air_time /60)
+
+meanspeed <- filtered |> group_by(date) |> summarise(speed = mean(speed), sd = sd(filtered$speed))
+
+p <- ggplot(meanspeed, aes(x=date, y=speed)) + 
+      geom_point() +
+      geom_ribbon(aes(ymin = speed - sd, ymax = speed + sd), alpha = .5, fill = "darkseagreen3", color = "transparent") +
+  labs(x = "Date", y = "avg speed [km/h]")
+p
+```
+
+2.5)
+
+Two companies offering the largest number of flights daily
+
+Plot number of times in which the company appears in the first two position along the year
+
+```{r}
+per_day <- flights |> count(carrier,daynum) |> arrange(daynum,- n) |> group_by(daynum) |> slice(1:2)
+
+per_day
+
+bp <- per_day[,"carrier"] |> count(carrier) |> arrange(-n)
+
+p <- ggplot(bp, aes(x=carrier, y=n, fill=carrier)) + 
+  geom_bar(stat = "identity")
+p
+```
+
+Two companies offering the largest number of flights weekly, same plot as before
+
+```{r}
+per_week <- flights |> count(carrier, weeknum) |> arrange(weeknum,- n) |> group_by(weeknum) |> slice(1:2)
+
+bp <- per_week[,"carrier"] |> count(carrier) |> arrange(-n)
+
+p <- ggplot(bp, aes(x=carrier, y=n, fill=carrier)) + 
+  geom_bar(stat = "identity")
+p
+```
+
+Company offering the smallest number of flights monthly, same plot as before
+
+```{r}
+per_month <- flights |> count(carrier, month) |> arrange(month, n) |> group_by(month) |> slice(1)
+
+per_month
+
+bp <- per_month[,"carrier"] |> count(carrier) |> arrange(-n)
+
+p <- ggplot(bp, aes(x=carrier, y=n, fill=carrier)) + 
+  geom_bar(stat = "identity")
+p
+```
+
+Longest flight per month, plot shows the longest flight per month along with the carrier providing it
+
+```{r}
+per_month <- flights[,c("month","distance","carrier")] |> arrange(month, - distance) |> group_by(month) |> slice(max(distance))
+
+per_month
+
+p <- ggplot(per_month, aes(x=month, y=distance, color=carrier)) +
+    geom_point(shape="diamond", size=5) +
+  labs(x = "Month", y = "distance [mi]")
+  
+p
+```

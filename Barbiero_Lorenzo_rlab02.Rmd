@@ -1,0 +1,235 @@
+---
+title: "Assignment_2"
+author: "Barbiero Lorenzo"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+##Exercise 1 - Discrete random variable
+
+pdf and cdf
+
+```{r}
+k <- c(1:5)
+ddisc <- k/15
+pdisc <- cumsum(ddisc)
+```
+
+Plot pdf
+```{r}
+pdfplt <- data.frame(k,ddisc)
+
+(g <- ggplot(pdfplt, aes(x=k,y=ddisc)))+geom_bar(stat="identity", width=1,fill="dodgerblue", color="ivory")
+```
+
+plot cdf
+
+```{r}
+cdfplt <- data.frame(k,pdisc)
+
+(g <- ggplot(cdfplt, aes(x=k,y=pdisc)))+geom_bar(stat="identity", width=1, fill = "coral1", color="ivory")
+```
+Compute mean and variance
+
+```{r}
+E_x <- sum(k * ddisc)
+E_x2 <- sum(k * k * ddisc)
+var <- E_x2 - (E_x)**2 
+
+E_x
+var
+```
+
+Compute E[k(6-k)]
+
+E[k(6-k)]=E[6^k-k^2]=6 E[k] - E[k^2]
+```{r}
+E_k = 6*E_x - E_x2
+E_k
+```
+
+Draw random samples from distribution
+
+```{r}
+rdisc = function(n) {
+  x <- runif(n,0,1)
+  y <- ifelse(x < 1/15, 1,
+              ifelse(x < 3/15, 2,
+                     ifelse(x < 6/15, 3,
+                            ifelse(x < 10/15, 4, 5))))
+  
+}
+
+sampler <- data.frame(rdisc(10e+4))
+colnames(sampler) <- "samples"
+
+(g <- ggplot(sampler) + 
+   geom_histogram(binwidth=1 ,fill = "deeppink3", color="white",aes(x=samples, y=after_stat(density))) +
+   geom_point(data = pdfplt, size=7, color = "dodgerblue", aes(x=k, y=ddisc)))
+```
+
+##Exercise 2 - Random continuos variable
+
+Define pdf and cdf
+
+```{r}
+
+
+x <- seq(0,5,0.05)
+a <- 1
+b <- 4
+c <- 2
+
+pdf <- ifelse(x<a | x>b, 0, ifelse(x<c, 2*(x-a)/((b-a)*(c-a)), 2*(b-x)/((b-a)*(b-c))))
+cdf <- ifelse(x<a, 0,
+              ifelse(x<c,(x-a)**2/((b-a)*(c-a)),
+                     ifelse(x<b,(c-a)/(b-a)+(2*b*(x-c)-x**2+c**2)/((b-c)*(b-a)),1)))
+
+X <- data.frame(x,pdf,cdf)
+```
+
+Plot pdf
+```{r}
+p <- ggplot(X, aes(x=x,y=pdf)) +
+     geom_line(lwd=1, color = "dodgerblue")
+p
+```
+
+Plot cdf
+```{r}
+p <- ggplot(X, aes(x=x,y=cdf)) +
+     geom_line(lwd=1, color = "coral1")
+p
+```
+
+Sample from the pdf using the accept/reject method.
+
+```{r}
+samplefunc <- function(N) {
+  i <- 1
+  SMPL <- rep(0,N)
+  while (i<N+1) {
+    x <- runif(1,a,b)
+    y <- runif(1,0,1)
+    if(x<=c) {
+      if (y < 2*(x-a)/((b-a)*(c-a))) {
+        SMPL[i] <- x
+        i <- i+1
+      }
+    }
+    if(x>c) {
+      if (y < 2*(b-x)/((b-a)*(b-c))) {
+        SMPL[i] <- x
+        i <- i+1
+      }
+    }
+  }
+  return(SMPL)
+}
+```
+
+```{r}
+Y <- data.frame(samplefunc(1e+4))
+colnames(Y) <- "samples"
+
+(g <- ggplot(Y) + 
+   geom_histogram(fill = "deeppink3", color="white",aes(x=samples, y=after_stat(density))) +
+   geom_line(data = X, lwd=1, color = "dodgerblue", aes(x=x, y=pdf)))
+```
+
+##Exercise 3 - Waiting time at the Doctor
+
+Simulated waiting times for 60 people, showing expected and computed mean waiting time
+
+```{r}
+X <- data.frame(rexp(60,1/30))
+colnames(X) <- "wait_time"
+wt <- mean(X$wait_time)
+
+(g <- ggplot(X, aes(x=wait_time)) + geom_histogram(binwidth= 5, fill = "deeppink3", color="white"))
+```
+Probability of waiting less than 12 minutes
+
+```{r}
+wt <- pexp(12,1/30)
+wt
+```
+Probability of waiting more than 1hr
+
+```{r}
+wt <- 1 - pexp(60,1/30)
+wt
+```
+
+##Exercise 4 - Multiple choices exam
+
+This is a standard application of the Bayes theorem, where:
+- R = "right answer"
+- K = "knows the answer"
+We have P(K) = 0.7, P(R|not(K)) = 0.2 (so P(not(R)|not(K))=0.8), P(K|R) = ? from the text,
+we also reasonably assume P(R|K) = 1, and P(not(R)|K)=0
+
+After some algebraic manipulation we get to
+
+P(K|R) = [P(R|K)P(K)]/[P(R|K)P(K)+P(R|not(K))P(not(K))]
+
+```{r}
+a <- (1*0.7)/(1*0.7+0.2*0.3)
+a
+```
+
+
+##Exercise 5 - Train waiting time
+
+The first train will leave at 11:00, the next ones would be at 11:30 and 12:00.
+For time invariance I will draw numbers from 0 (10:45) to 60 (11:45) with train times marked as 15,45,75.
+
+```{r}
+N <- 100000
+t <- runif(N,0,60)
+wait <- ifelse(t<15,15-t,ifelse(t<45,45-t,75-t))
+
+Y <- data.frame(wait)
+colnames(Y) <- "wait_times"
+
+(g <- ggplot(Y, aes(x=wait_times)) + geom_histogram(binwidth=1,fill = "deeppink3", color="white", aes(y=after_stat(density))))
+```
+
+Wait at most ten minutes
+```{r}
+wt <- length(which(Y$wait_times<=10))/length(Y$wait_times)
+wt
+```
+
+Wait at least 15 minutes
+```{r}
+wt <- length(which(Y$wait_times>15))/length(Y$wait_times)
+wt
+```
+
+Average waiting time
+```{r}
+wt <- mean(Y$wait_times)
+wt
+```
+
+##Exercise 6 - Stock Investment
+The return on the investment follows a normal distribution.
+Starting investment is 200*85=17000€ so a profit of 800€ translates to a profit of 4.7%.
+The solution is easily obtained through the normal cdf
+
+```{r}
+target_perc <- 800/170
+prob <- 1 - pnorm(target_perc,10,12)
+prob
+```
+

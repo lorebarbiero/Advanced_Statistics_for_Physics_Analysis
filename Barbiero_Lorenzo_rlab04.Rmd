@@ -1,0 +1,485 @@
+---
+title: "Barbiero_Lorenzo_rlab04"
+author: "Barbiero Lorenzo"
+date: "`r Sys.Date()`"
+output: 
+  prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+```
+
+
+## Exercise 1
+Recorded measurements are:
+
+```{r}
+meas = c(5,8,4,6,11,6,6,5,6,4)
+```
+
+### Flat and Jeffrey's prior
+
+```{r}
+x <- seq(0,10,0.001)
+u.post <- dgamma(x,sum(meas)+1,length(meas))
+u.meanval <- sum(u.post*x*(x[2]-x[1]))
+u.var <- sqrt(sum(u.post*x*x*(x[2]-x[1]))-u.meanval**2)
+j.post <- dgamma(x,sum(meas)+0.5,length(meas))
+j.meanval <- sum(j.post*x*(x[2]-x[1]))
+j.var <- sqrt(sum(j.post*x*x*(x[2]-x[1]))-j.meanval**2)
+ex1 <- data.frame(x,u.post,j.post)
+
+quantities <- c("lower quantile","upper quantile")
+flat_prior <- c(qgamma(0.025,sum(meas)+1,length(meas)),qgamma(0.975,sum(meas)+1,length(meas)))
+flat_normal <- c(qnorm(0.025,u.meanval,u.var),qnorm(0.975,u.meanval,u.var))
+jeff_prior <- c(qgamma(0.025,sum(meas)+0.5,length(meas)),qgamma(0.975,sum(meas)+0.5,length(meas)))
+jeff_normal <- c(qnorm(0.025,j.meanval,j.var),qnorm(0.975,j.meanval,j.var))
+summary <- data.frame(quantities,flat_prior,flat_normal,jeff_prior,jeff_normal)
+summary
+```
+
+#### Flat Prior
+
+```{r}
+(g<-ggplot(ex1)+
+   geom_line(aes(x,u.post),color="#29bdc5", lwd=1)+
+   geom_vline(xintercept = flat_prior[1],color="#20949c", lwd=1, linetype="dashed")+
+   geom_vline(xintercept = flat_prior[2],color="#20949c", lwd=1, linetype="dashed"))
+```
+#### Jeffrey's Prior
+
+```{r}
+(g<-ggplot(ex1)+
+   geom_line(aes(x,j.post),color="#e63900", lwd=1)+
+   geom_vline(xintercept = jeff_prior[1],color="#8b2900", lwd=1, linetype="dashed")+
+   geom_vline(xintercept = jeff_prior[2],color="#8b2900", lwd=1, linetype="dashed"))
+```
+
+## Exercise 2
+
+The probability distribution for the number of mis diagnoses is a Bernoulli process with p=0.15
+
+```{r}
+n <- seq(0,30,1)
+bern <- dbinom(n,75,0.15)
+ex2 <- data.frame(n,bern)
+
+(p<-ggplot(ex2)+geom_bar(aes(n,bern), stat = "identity", color="white", fill="navy"))
+```
+
+If the disease is misdiagnosed for y=6 people the frequentist estimator is
+
+```{r}
+pfreq <- 6/75
+pfreq
+```
+
+The Bayesian estimator is
+
+```{r}
+p <- seq(0,1,0.001)
+M <- 0.15
+V <- 0.14
+
+alpha <- M**2*(1-M)/V-M
+beta <- alpha/M
+
+prior  <- dbeta(p,alpha,beta)
+post <- dbeta(p,alpha+6,beta+69)
+ex22 <- data.frame(p,post)
+
+(p<-ggplot(ex22[ex22$p<0.3,])+geom_line(aes(p,post), color="orangered", lwd=1))
+```
+
+
+### Hypothesis test
+
+#### Bayesian approach
+
+This is a case of one sided hypothesis test, in the bayesian approach we can simply refer to the previous calculations
+
+```{r}
+(p<-ggplot(ex22[ex22$p<0.3,])+geom_line(aes(p,post),lwd=1)+
+    geom_vline(xintercept=0.15, color="palegreen4",linetype="dotted", lwd=1)+
+    geom_area(data=ex22[ex22$p<0.3 & ex22$p>qbeta(0.95,alpha+6,beta+69),],aes(p,post),fill="red", alpha=0.5)+
+    geom_vline(xintercept=qbeta(0.95,alpha+6,beta+69), color="red", linetype="dotted", lwd=1)
+    )
+```
+
+Given that the probability of having p >= 0.15 (null hypothesis) lies outside the acceptance region we reject it
+
+#### Frequentist approach
+We compute the probability that the null hypothesis is true (p >= 0.15) given the observed data, this results in computing the probability of getting at least 11 misdiagnoses
+
+```{r}
+bern <- dbinom(n,75,6/75)
+ex2 <- data.frame(n,bern)
+
+(p<-ggplot(ex2)+geom_bar(aes(n,bern), stat = "identity")+
+    geom_bar(data=ex2[ex2$n>10,],aes(n,bern), stat = "identity", fill="palegreen4")+
+    geom_hline(yintercept=0.05,color="red",linetype="dotted", lwd=1))
+```
+```{r}
+pv <- sum(data=ex2[ex2$n>10,"bern"])
+pv
+```
+The null hypothesis is, thus, rejected
+
+## Lighthouse Problem
+Generate data
+
+```{r}
+set.seed(1234)
+lhdata <- function(N,a,b) {
+  x <- b*tan(runif(N,-pi,pi))+a
+  return(x)
+}
+
+a.true <- 2
+b.true <- 1
+dat <- lhdata(50,a.true,b.true)
+
+xplt <- c(a.true,dat)
+yplt <- c(b.true,rep(0,length(dat)))
+plt <- data.frame(xplt,yplt)
+
+(g<-ggplot(plt)+geom_point(aes(xplt,yplt), color="firebrick2")+geom_point(data=plt[1,],aes(xplt,yplt),color="blue", size=5, shape=15))
+```
+
+## Exercise 3
+The likelihood is the same as the one calculated in class but needs to be evaluated on a grid of values for a and b.
+
+```{r}
+lhood <- function(x,a,b){
+  l <- 0
+  for (i in x) {
+    l <- l + log(b) - log(b**2 + (i-a)**2)
+  }
+  return(l)
+}
+```
+
+```{r}
+A <- seq(1,3,0.01)
+B <- seq(0.1,2,0.01)
+
+DF <- rep(0,length(A)*length(B))
+
+res <- data.frame(DF,DF,DF)
+colnames(res) <- c("a","b","lhood")
+
+k <- 1
+for (i in A) {
+  for (j in B) {
+    res[k,] <- c(i,j,lhood(dat,i,j))
+    k <- k+1
+  }
+}
+res[,"lhood"] <- res[,"lhood"]-max(res[,"lhood"])
+res[,"lhood"] <- exp(res[,"lhood"])
+maxlh <- res[res$lhood==max(res[,"lhood"]),]
+
+(p <- ggplot(res)+stat_contour_filled(aes(x=a,y=b,z=lhood))+
+    geom_point(data=maxlh,aes(a,b),color="red"))
+```
+
+Marginalization
+
+```{r}
+marg_a <- data.frame(A,rep(0,length(A)))
+colnames(marg_a) <- c("a","prob")
+
+for (i in marg_a[,"a"]) {
+  bvalues <- res[res$a==i,"lhood"]
+  marg_a[marg_a$a==i,"prob"] <- sum(bvalues)
+}
+marg_a[,"prob"] <- marg_a[,"prob"]/((A[2]-A[1])*sum(marg_a[,"prob"]))
+(p<-ggplot(marg_a)+geom_line(aes(a,prob),color="orangered",lwd=1))
+```
+
+```{r}
+marg_b <- data.frame(B,rep(0,length(B)))
+colnames(marg_b) <- c("b","prob")
+
+for (i in marg_b[,"b"]) {
+  bvalues <- res[res$b==i,"lhood"]
+  marg_b[marg_b$b==i,"prob"] <- sum(bvalues)
+}
+marg_b[,"prob"] <- marg_b[,"prob"]/((B[2]-B[1])*sum(marg_b[,"prob"]))
+(p<-ggplot(marg_b)+geom_line(aes(b,prob),color="lightslateblue",lwd=1))
+```
+
+## Exercise 4
+The general framework will be similar to the previous exercise
+
+```{r}
+sgn <- function(x, a, b, x0, w, t) {return(t * (a*exp(-(x-x0)**2/(2*w**2)) + b))}
+
+log.post <- function(d, x, a, b, x0, w, t) {
+  sum(dpois(d, lambda=sgn(x, a, b, x0, w, t), log=TRUE))
+}
+```
+
+
+Generate signal, data and plot function
+
+```{r}
+x0 <- 0
+w <-1 
+A.true <- 2 
+B.true <- 1 
+Delta.t <- 5
+```
+
+```{r}
+x <- seq(from=-7*w, to=7*w, by=0.01*w) #signal
+signal <- sgn(x,A.true,B.true,0,w,Delta.t)
+
+resolution <- 0.5 #data
+xdat <- seq(from=-7*w, to=7*w, by=resolution*w)
+meas <- sgn(xdat,A.true,B.true,0,w,Delta.t)
+data <- rpois(length(meas), meas)
+
+plf <- function(x,signal,xdat,data) {
+  sn <- data.frame(x,signal)
+  ms <- data.frame(xdat,data)
+  g <- ggplot() + geom_bar(aes(xdat,data), stat = "identity", fill="violetred1",color="white") + geom_line(data=sn, aes(x,signal), color="dodgerblue2", lwd=1.5)
+  return(g)
+}
+```
+
+```{r}
+(plf(x,signal,xdat,data))
+```
+
+Compute unnnormalized likelihood
+
+```{r}
+A <- seq(1,3,0.01)
+B <- seq(0.1,2,0.01)
+
+DF <- rep(0,length(A)*length(B))
+
+res <- data.frame(DF,DF,DF)
+colnames(res) <- c("A","B","lhood")
+
+k <- 1
+for (i in A) {
+  for (j in B) {
+    res[k,] <- c(i,j,log.post(data,xdat,i,j,x0,w,Delta.t))
+    k <- k+1
+  }
+}
+res[,"lhood"] <- res[,"lhood"]-max(res[,"lhood"])
+res[,"lhood"] <-  exp(res[,"lhood"])
+maxlh <- res[res$lhood==max(res[,"lhood"]),]
+(p <- ggplot()+stat_contour_filled(data=res,aes(x=A,y=B,z=lhood))+geom_point(data=maxlh,aes(A,B),color="red"))
+```
+
+Marginalization
+
+```{r}
+marg_a <- data.frame(A,rep(0,length(A)))
+colnames(marg_a) <- c("A","prob")
+
+for (i in marg_a[,"A"]) {
+  bvalues <- res[res$A==i,"lhood"]
+  marg_a[marg_a$A==i,"prob"] <- sum(bvalues)
+}
+marg_a[,"prob"] <- marg_a[,"prob"]/((A[2]-A[1])*sum(marg_a[,"prob"]))
+(p<-ggplot(marg_a)+geom_line(aes(A,prob),color="orangered",lwd=1))
+```
+
+```{r}
+marg_b <- data.frame(B,rep(0,length(B)))
+colnames(marg_b) <- c("B","prob")
+
+for (i in marg_b[,"B"]) {
+  bvalues <- res[res$B==i,"lhood"]
+  marg_b[marg_b$B==i,"prob"] <- sum(bvalues)
+}
+marg_b[,"prob"] <- marg_b[,"prob"]/((B[2]-B[1])*sum(marg_b[,"prob"]))
+(p<-ggplot(marg_b)+geom_line(aes(B,prob),color="lightslateblue",lwd=1))
+```
+
+#### Changing the resolution
+
+For the next steps I'm gonna recap everything into a single function and provide the graphic results
+
+```{r}
+twoparanalysis <- function(a, b, x0, w, t, resl) {
+  x <- seq(from=-7*w, to=7*w, by=0.01*w) #signal
+  signal <- sgn(x,A.true,B.true,0,w,Delta.t)
+
+  resolution <- resl #data
+  xdat <- seq(from=-7*w, to=7*w, by=resolution*w)
+  meas <- sgn(xdat,A.true,B.true,0,w,Delta.t)
+  data <- rpois(length(meas), meas)
+
+  plf <- function(x,signal,xdat,data) {
+    sn <- data.frame(x,signal)
+    ms <- data.frame(xdat,data)
+    g <- ggplot() + geom_bar(aes(xdat,data), stat = "identity", fill="violetred1",color="white") +   geom_line(data=sn, aes(x,signal), color="dodgerblue2", lwd=1.5)
+  return(g)
+  }
+  p1 <- plf(x,signal,xdat,data)
+  
+  
+  A <- seq(a-1,a+1,0.01)
+  B <- seq(b-1+0.1,b+1,0.01)
+  
+  DF <- rep(0,length(A)*length(B))
+  res <- data.frame(DF,DF,DF)
+  colnames(res) <- c("A","B","lhood")
+
+  k <- 1
+  for (i in A) {
+    for (j in B) {
+      res[k,] <- c(i,j,log.post(data,xdat,i,j,x0,w,Delta.t))
+      k <- k+1
+    }
+  }
+  res[,"lhood"] <- res[,"lhood"]-max(res[,"lhood"])
+  res[,"lhood"] <-  exp(res[,"lhood"])
+  maxlh <- res[res$lhood==max(res[,"lhood"]),]
+  p2 <- ggplot()+stat_contour_filled(data=res,aes(x=A,y=B,z=lhood))+geom_point(data=maxlh,aes(A,B),color="red")+theme(legend.position = "none")
+  
+  
+  marg_a <- data.frame(A,rep(0,length(A)))
+  colnames(marg_a) <- c("A","prob")
+  
+  for (i in marg_a[,"A"]) {
+    bvalues <- res[res$A==i,"lhood"]
+    marg_a[marg_a$A==i,"prob"] <- sum(bvalues)
+  }
+  marg_a[,"prob"] <- marg_a[,"prob"]/((A[2]-A[1])*sum(marg_a[,"prob"]))
+  p3<-ggplot(marg_a)+geom_line(aes(A,prob),color="orangered",lwd=1)
+  
+  
+  marg_b <- data.frame(B,rep(0,length(B)))
+  colnames(marg_a) <- c("B","prob")
+
+  for (i in marg_b[,"B"]) {
+    bvalues <- res[res$B==i,"lhood"]
+    marg_b[marg_b$B==i,"prob"] <- sum(bvalues)
+  }
+  marg_b[,"prob"] <- marg_b[,"prob"]/((B[2]-B[1])*sum(marg_b[,"prob"]))
+  p4<-ggplot(marg_b)+geom_line(aes(B,prob),color="lightslateblue",lwd=1)
+
+plot <- ggarrange(p1,p2,p3,p4, nrow=2, ncol=2, heights = c(1,1))
+return(plot)
+}
+```
+
+#### Changing the resolution
+
+```{r}
+x0 <- 0
+w <-1 
+A.true <- 2 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 0.1
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+```{r}
+x0 <- 0
+w <-1 
+A.true <- 2 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 0.25
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+```{r}
+x0 <- 0
+w <-1 
+A.true <- 2 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 1
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+```{r}
+x0 <- 0
+w <-1 
+A.true <- 2 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 2
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+```{r}
+x0 <- 0
+w <-1 
+A.true <- 2 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 3
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+As expected increasing the resolution of the detector drammaticaly improves performance
+
+#### Changing A/B Ratio
+
+In the previous case we had a 2:1 signal to noise ratio, let's try changing it
+
+```{r}
+#1:1 signal to noise ratio
+x0 <- 0
+w <-1 
+A.true <- 1 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 0.5
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+
+```{r}
+#3:1 signal to noise ratio
+x0 <- 0
+w <-1 
+A.true <- 5 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 0.5
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+
+```{r}
+#5:1 signal to noise ratio
+x0 <- 0
+w <-1 
+A.true <- 5 
+B.true <- 1 
+Delta.t <- 5
+resolution <- 0.5
+
+(twoparanalysis(A.true,B.true,x0,w,Delta.t,resolution))
+```
+
+Surprisingly, the analysis seems to hold up even for high noise and, on the other hand, doesn't 
+improve much by improving the signal to noise ratio

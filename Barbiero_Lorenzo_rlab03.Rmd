@@ -1,0 +1,526 @@
+---
+title: "Barbiero_Lorenzo_rlab03"
+author: "Barbiero Lorenzo"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+```
+
+## Exercise 1
+
+For aesthetic reasons I will keep the distributions in separate plots
+
+### Uniform prior
+
+```{r}
+p <- seq(0,1,0.001)
+unif.prior <- dbeta(p,1,1)
+unif.post <- dbeta(p,8,14)
+UNIF <- data.frame(p,unif.prior,unif.post)
+q <- pbeta(0.5,8,13)
+(plt<-ggplot(UNIF)+geom_line(aes(p,unif.post), color="#29bdc5", lwd=1)
+  +geom_line(aes(p,unif.prior), color="#20949c", lwd=1, linetype="dashed")+
+    ggtitle("Prior teal, Posterior light blue"))
+```
+
+### Jeffrey's prior
+
+```{r}
+jeff.prior <- dbeta(p,0.5,0.5)
+jeff.post <- dbeta(p,0.5+7,0.5+13)
+JEFF <- data.frame(p,jeff.prior,jeff.post)
+(plt<-ggplot(JEFF) + geom_line(aes(p,jeff.post), color="#e63900", lwd=1)+
+    geom_line(aes(p,jeff.prior), color="#8b2900", lwd=1, linetype="dashed")+
+    ggtitle("Prior brown, Posterior orange"))
+```
+
+### Custom prior
+
+define custom prior
+
+```{r}
+x <- seq(0,1,0.01)
+custprior <- function(x) {
+  custprior <- ifelse(x<0.2,x,
+              ifelse(x<0.3,0.2,
+                     ifelse(x<0.5,0.5-x,0)))
+  return(custprior)
+}
+
+Int <- integrate(custprior,0,1)$value
+cprior <- custprior(p) / integrate(custprior,0,1)$value
+```
+
+compute posterior
+
+```{r}
+custompost <- function(x,r=7,n=20) {
+  cpost <- custprior(x) * dbinom(7,20,x)
+  return(cpost)
+}
+int <- integrate(custompost,0,1)$value
+cpost <- custompost(p)/integrate(custompost,0,1)$value
+CUST <- data.frame(p,cpost,cprior)
+(plt<-ggplot(CUST))+geom_line(aes(p,cpost)) +
+  geom_line(aes(p,cprior), linetype = "dashed", color = "#317373", lwd=1) +
+  geom_line(aes(p,cpost), color = "#73ac31", lwd=1)+
+  ggtitle("Prior dark green, Posterior green")
+```
+
+Compute first two moments
+
+```{r}
+mnf <- function(x){return(custompost(x)*x)}
+mn <- integrate(mnf,0,1)$value/integrate(custompost,0,1)$value
+mn
+vrf <- function(x){return(custompost(x)*(x-mn)**2)}
+vr <- integrate(vrf,0,1)$value/integrate(custompost,0,1)$value
+vr
+```
+
+
+Compute 95% quantile
+
+```{r}
+cust.quant <- function(x,low,up) {
+  for (i in x) {
+    int <- integrate(custompost,0,i)$value/integrate(custompost,0,1)$value
+    if (int < low) {
+      lbound <- i
+    }
+    if (int < up) {
+      ubound <- i
+    }
+  }
+  return(c(lbound,ubound))
+}
+
+q <- cust.quant(p,0.025,0.975)
+```
+
+
+### Results comparison
+
+Summary table
+
+```{r}
+var_beta <- function(alpha,beta) {return((alpha*beta)/(((alpha+beta)**2)*(alpha+beta+1)))}
+
+quantities <- c("First moment","Second Moment","lower quantile","upper quantile")
+flat_prior <- c(8/22,var_beta(8,14),qbeta(0.025,8,14),qbeta(0.975,8,14))
+jeff_prior <- c(7.5/21,var_beta(7.5,13.5),qbeta(0.025,7.5,13.5),qbeta(0.975,7.5,13.5))
+custom_prior <- c(mn,vr,q[1],q[2])
+summary <- data.frame(quantities,flat_prior,jeff_prior,custom_prior)
+summary
+```
+
+Plots
+
+```{r}
+(plt <- ggplot(UNIF) + geom_line(aes(p,unif.post), color="#29bdc5", lwd=1)+
+   geom_vline(xintercept=qbeta(0.025,8,14), color="#29bdc5", linetype="dotted", lwd=1) + 
+   geom_vline(xintercept=qbeta(0.975,8,14), color="#29bdc5", linetype="dotted", lwd=1) +
+   geom_line(data=JEFF, aes(p,jeff.post), color="#e63900", lwd=1) +
+   geom_vline(xintercept=qbeta(0.025,7.5,13.5), color="#e63900", linetype="dotted", lwd=1) + 
+   geom_vline(xintercept=qbeta(0.975,7.5,13.5), color="#e63900", linetype="dotted", lwd=1) +
+   geom_line(data=CUST, aes(p,cpost), color = "#73ac31", lwd=1) +
+   geom_vline(xintercept=q[1], color="#73ac31", linetype="dotted", lwd=1) + 
+   geom_vline(xintercept=q[2], color="#73ac31", linetype="dotted", lwd=1) +
+   labs(x="r",y="Probability")
+ )
+```
+
+
+## Exercise 2
+
+The experiment is clearly a Bernoulli process with r=17 and n=116
+
+### Uniform prior vs Beta prior
+
+```{r}
+unif.post <- dbeta(p,18,100)
+beta.prior <- dbeta(p,1,4)
+beta.post <- dbeta(p,18,103)
+
+X <- data.frame(p,unif.post,beta.prior,beta.post)
+
+plt<-ggplot(X)+geom_line(aes(p,unif.post),color="#8394f6", lwd=1) +
+  geom_line(aes(p,beta.prior), linetype="dashed", color="#8b417b", lwd=1) +
+  geom_line(aes(p,beta.post), color="#d58bcd", lwd=1)
+
+qlt<-ggplot(X[X$p<0.33,])+geom_line(aes(p,unif.post),color="#8394f6", lwd=1) +
+  geom_line(aes(p,beta.prior), linetype="dashed", color="#8b417b", lwd=1) +
+  geom_line(aes(p,beta.post), color="#d58bcd", lwd=1)
+
+(plot <- ggarrange(plt,qlt, nrow=2, ncol=1, heights = c(1,1)))
+```
+Summary table
+
+```{r}
+quantities <- c("First moment","Second Moment")
+flat_prior <- c(18/118,var_beta(18,100),qbeta(0.025,18,100),qbeta(0.975,18,100))
+beta_prior <- c(18/121,var_beta(18,103),qbeta(0.025,18,103),qbeta(0.975,18,103))
+summary <- data.frame(quantities,beta_prior,jeff_prior)
+summary
+```
+
+
+### Flat prior and normal approximation
+
+Given the previous plot I will plot in a restricted region
+```{r}
+un.norm <- dnorm(p,17/116,1/116 * (17*(116-17)/116)**0.5)
+X <- data.frame(p,unif.post,beta.prior,beta.post,un.norm)
+
+(plt<-ggplot(X[X$p<0.33,])+geom_line(aes(p,unif.post),color="#8394f6", lwd=1) +
+    geom_vline(xintercept=qbeta(0.025,18,100), color="#8394f6", linetype="dotted", lwd=1) + 
+    geom_vline(xintercept=qbeta(0.975,18,100), color="#8394f6", linetype="dotted", lwd=1) + 
+    geom_line(aes(p,un.norm), color="#8b417b", lwd=1)+
+    geom_vline(xintercept=qnorm(0.025,17/116,1/116 * (17*(116-17)/116)**0.5), color="#8b417b", linetype="dotted", lwd=1) + 
+    geom_vline(xintercept=qnorm(0.975,17/116,1/116 * (17*(116-17)/116)**0.5), color="#8b417b", linetype="dotted", lwd=1) )
+
+```
+```{r}
+quantities <- c("First moment","Second Moment","lower quantile","upper quantile")
+flat_prior <- c(18/118,var_beta(18,100),qbeta(0.025,18,100),qbeta(0.975,18,100))
+normal_app <- c(17/116,1/116 * (17*(116-17)/116)**0.5,qnorm(0.025,17/116,1/116 * (17*(116-17)/116)**0.5),qnorm(0.975,17/116,1/116 * (17*(116-17)/116)**0.5))
+summary <- data.frame(quantities,flat_prior,normal_app)
+summary
+```
+
+### Beta prior and normal approximation
+
+```{r}
+bt.norm <- dnorm(p, 17/119, 1/119 * (1/(1/17-1/102))**0.5)
+
+X <- data.frame(p,unif.post,beta.prior,beta.post,un.norm,bt.norm)
+
+(plt<-ggplot(X[X$p<0.33,])+geom_line(aes(p,beta.post),color="#8394f6", lwd=1) +
+    geom_vline(xintercept=qbeta(0.025,18,103), color="#8394f6", linetype="dotted", lwd=1) + 
+    geom_vline(xintercept=qbeta(0.975,18,103), color="#8394f6", linetype="dotted", lwd=1) + 
+    geom_line(aes(p,bt.norm), color="#8b417b", lwd=1)+
+    geom_vline(xintercept=qnorm(0.025,17/119, 1/119 * (1/(1/17-1/102))**0.5), color="#8b417b", linetype="dotted", lwd=1) + 
+    geom_vline(xintercept=qnorm(0.975,17/119, 1/119 * (1/(1/17-1/102))**0.5), color="#8b417b", linetype="dotted", lwd=1))
+```
+```{r}
+quantities <- c("First moment","Second Moment","lower quantile","upper quantile")
+beta_prior <- c(17/119,var_beta(18,103),qbeta(0.025,18,103),qbeta(0.975,18,103))
+normal_app <- c(17/119,1/119 * (1/(1/17-1/102))**0.5,qnorm(0.025,17/119,1/119 * (1/(1/17-1/102))**0.5),qnorm(0.975,17/119,1/119 * (1/(1/17-1/102))**0.5))
+summary <- data.frame(quantities,beta_prior,normal_app)
+summary
+```
+
+
+## Exercise 3 - Coin flip
+
+### Flat prior
+
+```{r}
+p <- seq(0,1,0.001)
+unif.prior <- dbeta(p,1,1)
+unif.post <- dbeta(p,16,16)
+unif.llhood <- dbinom(15,30,p)/(0.001*sum(dbinom(15,30,p)))
+UNIF <- data.frame(p,unif.prior,unif.post,unif.llhood)
+
+(plt<-ggplot(UNIF)+geom_line(aes(p,unif.post), color="brown3", lwd=1) +
+  geom_line(aes(p,unif.prior), color="dodgerblue", lwd=1, linetype="dashed") +
+  geom_line(aes(p,unif.llhood), color="chartreuse3", lwd=2, linetype="dotted") +
+  labs(x="r", y="Probability") + ggtitle("Prior Blue, Post Red, Likelihood Green"))
+```
+Most probable value and 96% credibility interval
+
+
+
+### Beta Prior
+One can ask what happens with another beta prior, for example, assuming a fair coin we could use beta(2,2)
+
+```{r}
+p <- seq(0,1,0.001)
+unif.prior <- dbeta(p,2,2)
+unif.post <- dbeta(p,17,17)
+unif.llhood <- dbinom(15,30,p)/(0.001*sum(dbinom(15,30,p)))
+UNIF <- data.frame(p,unif.prior,unif.post,unif.llhood)
+
+(plt<-ggplot(UNIF)+geom_line(aes(p,unif.post), color="brown3", lwd=1) +
+  geom_line(aes(p,unif.prior), color="dodgerblue", lwd=1, linetype="dashed") +
+  geom_line(aes(p,unif.llhood), color="chartreuse3", lwd=2, linetype="dotted") +
+  labs(x="r", y="Probability") + ggtitle("Prior Blue, Post Red, Likelihood Green"))
+```
+
+As can be clearly seen the posterior is dominated by the likelihood in both cases, which is to be expected. Regarding most probable value and credibility intervals
+
+```{r}
+quantities <- c("Most probable value","lower quantile","upper quantile")
+flat_prior <- c(16/32,qbeta(0.025,16,16),qbeta(0.975,16,16))
+beta_prior <- c(17/34,qbeta(0.025,17,17),qbeta(0.975,17,17))
+summary <- data.frame(quantities,flat_prior,beta_prior)
+summary
+```
+
+
+### Sequential Analysis
+
+```{r}
+meas <- c(1,1,1,1,1,0,1,1,0,0,1,1,0,0,0,1,0,1,0,1,0,0,1,0,1,0,1,0,0,0)
+```
+
+The sequential analysis accepts as an input any vector of results as the one above (1=H,0=T), the parameters of a generic beta prior and a credibility target percentage and returns, at each step, prior, posterior, likelihood and credibility interval
+
+```{r}
+seqana <- function(res,alpha,beta,credint) {
+  prior_alpha <- rep(0,length(res))
+  prior_beta <- rep(0,length(res))
+  post_alpha <- rep(0,length(res))
+  post_beta <- rep(0,length(res))
+  llhood_p <- rep(0,length(res))
+  llhood_n <- c(1:length(res))
+  lowq <- rep(0,length(res))
+  highq <- rep(0,length(res))
+  try_num <- c(1:length(res))
+  tot <- data.frame(try_num,res,prior_alpha,prior_beta,post_alpha,post_beta,llhood_n,llhood_p,lowq,highq)
+  
+  tot$prior_alpha[1] = alpha
+  tot$prior_beta[1] = beta
+  
+  p1 <- (1-credint)/2
+  p2 <- (1+credint)/2
+  
+  for (i in c(1:length(res))) {
+    
+    llh <- tot[tot$try_num <= i,]
+    llh <- llh[llh$res == 1,]
+    r <- nrow(llh)
+    tot$llhood_p[i] <- r
+    
+    if (res[i]==1) {
+      tot$post_alpha[i] <- tot$prior_alpha[i] + 1
+      tot$post_beta[i] <- tot$prior_beta[i]
+    }
+    
+    if (res[i]==0) {
+      tot$post_alpha[i] <- tot$prior_alpha[i]
+      tot$post_beta[i] <- tot$prior_beta[i] + 1
+    }
+    
+    if(i < length(res)) {
+      tot$prior_alpha[i+1] <- tot$post_alpha[i]
+      tot$prior_beta[i+1] <- tot$post_beta[i]
+    }
+    
+    a <- tot$post_alpha[i]
+    b <- tot$post_alpha[i]
+    
+    tot$lowq[i] <- qbeta(p1,a,b)
+    tot$highq[i] <- qbeta(p2,a,b)
+  }
+  return(tot)
+}
+
+tot <- seqana(meas,1,1,0.95)
+```
+
+I will plot the analysis for try_num=1,2,5,12,17,30.
+As before prior is in blue, posterior in red and likelihood in green
+
+```{r}
+pl.prior <- dbeta(p,tot[tot$try_num==1,"prior_alpha"],tot[tot$try_num==1,"prior_beta"])
+pl.post <- dbeta(p,tot[tot$try_num==1,"post_alpha"],tot[tot$try_num==1,"post_beta"])
+pl.llhood <- dbinom(tot[tot$try_num==1,"llhood_p"],tot[tot$try_num==1,"llhood_n"],p)/
+  (0.001*sum(dbinom(tot[tot$try_num==1,"llhood_p"],tot[tot$try_num==1,"llhood_n"],p)))
+pltot <- data.frame(p,pl.prior,pl.post,pl.llhood)
+
+pl_0 <- ggplot(pltot) + geom_line(aes(p,pl.prior),color="dodgerblue", lwd=1, linetype="dashed") + geom_line(aes(p,pl.post), color="brown3", lwd=1) + geom_line(aes(p,pl.llhood), color="chartreuse3", lwd=2, linetype="dotted")+labs(x="r", y="Probability")
+
+
+pl.prior <- dbeta(p,tot[tot$try_num==2,"prior_alpha"],tot[tot$try_num==2,"prior_beta"])
+pl.post <- dbeta(p,tot[tot$try_num==2,"post_alpha"],tot[tot$try_num==2,"post_beta"])
+pl.llhood <- dbinom(tot[tot$try_num==2,"llhood_p"],tot[tot$try_num==2,"llhood_n"],p)/
+  (0.001*sum(dbinom(tot[tot$try_num==2,"llhood_p"],tot[tot$try_num==2,"llhood_n"],p)))
+pltot <- data.frame(p,pl.prior,pl.post,pl.llhood)
+
+pl_1 <- ggplot(pltot) + geom_line(aes(p,pl.prior),color="dodgerblue", lwd=1, linetype="dashed") + geom_line(aes(p,pl.post), color="brown3", lwd=1) + geom_line(aes(p,pl.llhood), color="chartreuse3", lwd=2, linetype="dotted")+labs(x="r", y="Probability")
+
+
+pl.prior <- dbeta(p,tot[tot$try_num==5,"prior_alpha"],tot[tot$try_num==5,"prior_beta"])
+pl.post <- dbeta(p,tot[tot$try_num==5,"post_alpha"],tot[tot$try_num==5,"post_beta"])
+pl.llhood <- dbinom(tot[tot$try_num==5,"llhood_p"],tot[tot$try_num==5,"llhood_n"],p)/
+  (0.001*sum(dbinom(tot[tot$try_num==5,"llhood_p"],tot[tot$try_num==5,"llhood_n"],p)))
+pltot <- data.frame(p,pl.prior,pl.post,pl.llhood)
+
+pl_2 <- ggplot(pltot) + geom_line(aes(p,pl.prior),color="dodgerblue", lwd=1, linetype="dashed") + geom_line(aes(p,pl.post), color="brown3", lwd=1) + geom_line(aes(p,pl.llhood), color="chartreuse3", lwd=2, linetype="dotted")+labs(x="r", y="Probability")
+
+
+pl.prior <- dbeta(p,tot[tot$try_num==12,"prior_alpha"],tot[tot$try_num==12,"prior_beta"])
+pl.post <- dbeta(p,tot[tot$try_num==12,"post_alpha"],tot[tot$try_num==12,"post_beta"])
+pl.llhood <- dbinom(tot[tot$try_num==12,"llhood_p"],tot[tot$try_num==12,"llhood_n"],p)/
+  (0.001*sum(dbinom(tot[tot$try_num==12,"llhood_p"],tot[tot$try_num==12,"llhood_n"],p)))
+pltot <- data.frame(p,pl.prior,pl.post,pl.llhood)
+
+pl_3 <- ggplot(pltot) + geom_line(aes(p,pl.prior),color="dodgerblue", lwd=1, linetype="dashed") + geom_line(aes(p,pl.post), color="brown3", lwd=1) + geom_line(aes(p,pl.llhood), color="chartreuse3", lwd=2, linetype="dotted")+labs(x="r", y="Probability")
+
+
+pl.prior <- dbeta(p,tot[tot$try_num==17,"prior_alpha"],tot[tot$try_num==17,"prior_beta"])
+pl.post <- dbeta(p,tot[tot$try_num==17,"post_alpha"],tot[tot$try_num==17,"post_beta"])
+pl.llhood <- dbinom(tot[tot$try_num==17,"llhood_p"],tot[tot$try_num==17,"llhood_n"],p)/
+  (0.001*sum(dbinom(tot[tot$try_num==17,"llhood_p"],tot[tot$try_num==17,"llhood_n"],p)))
+pltot <- data.frame(p,pl.prior,pl.post,pl.llhood)
+
+pl_4 <- ggplot(pltot) + geom_line(aes(p,pl.prior),color="dodgerblue", lwd=1, linetype="dashed") + geom_line(aes(p,pl.post), color="brown3", lwd=1) + geom_line(aes(p,pl.llhood), color="chartreuse3", lwd=2, linetype="dotted")+labs(x="r", y="Probability")
+
+
+pl.prior <- dbeta(p,tot[tot$try_num==30,"prior_alpha"],tot[tot$try_num==30,"prior_beta"])
+pl.post <- dbeta(p,tot[tot$try_num==30,"post_alpha"],tot[tot$try_num==30,"post_beta"])
+pl.llhood <- dbinom(tot[tot$try_num==30,"llhood_p"],tot[tot$try_num==30,"llhood_n"],p)/
+  (0.001*sum(dbinom(tot[tot$try_num==30,"llhood_p"],tot[tot$try_num==30,"llhood_n"],p)))
+pltot <- data.frame(p,pl.prior,pl.post,pl.llhood)
+
+pl_5 <- ggplot(pltot) + geom_line(aes(p,pl.prior),color="dodgerblue", lwd=1, linetype="dashed") + geom_line(aes(p,pl.post), color="brown3", lwd=1) + geom_line(aes(p,pl.llhood), color="chartreuse3", lwd=2, linetype="dotted")+labs(x="r", y="Probability")
+
+(plot <- ggarrange(pl_0,pl_1,pl_2,pl_3,pl_4,pl_5, nrow=2, ncol=3, heights = c(1,1)))
+```
+
+### Results comparison
+
+Is the sequential analysis the same as the "batch" analysis?
+
+```{r}
+(tot[tot$try_num==30,c("post_alpha","post_beta")])
+```
+As we can see results are the same, as expected
+
+## Exercise 4
+
+Probability computation starts after the first extraction, a flat prior is assumed
+
+```{r}
+extraction <- function(N) {
+  #simulate box choice
+  p <- floor(runif(1,0,6))/(5)
+  #simulate extraction according to box chosen
+  res <- rbinom(N,1,p)
+  #initialize relevant quantities
+  p_0 <- rep(0,N)
+  p_1 <- rep(0,N)
+  p_2 <- rep(0,N)
+  p_3 <- rep(0,N)
+  p_4 <- rep(0,N)
+  p_5 <- rep(0,N)
+  p_w <- seq(0,1,0.2)
+  p_b <- seq(1,0,-0.2)
+  try_num <- c(1:N)
+  
+  #first iteration
+  if (res[1]==1) {
+    p_0[1] <- p_w[1] * 0.2
+    p_1[1] <- p_w[2] * 0.2
+    p_2[1] <- p_w[3] * 0.2
+    p_3[1] <- p_w[4] * 0.2
+    p_4[1] <- p_w[5] * 0.2
+    p_5[1] <- p_w[6] * 0.2
+    
+    nm <- 1/sum(p_0[1],p_1[1],p_2[1],p_3[1],p_4[1],p_5[1])
+    
+    p_0[1] <- p_0[1] * nm
+    p_1[1] <- p_1[1] * nm
+    p_2[1] <- p_2[1] * nm
+    p_3[1] <- p_3[1] * nm
+    p_4[1] <- p_4[1] * nm
+    p_5[1] <- p_5[1] * nm
+  }
+  
+    if (res[1]==0) {
+    p_0[1] <- p_b[1] * 0.2
+    p_1[1] <- p_b[2] * 0.2
+    p_2[1] <- p_b[3] * 0.2
+    p_3[1] <- p_b[4] * 0.2
+    p_4[1] <- p_b[5] * 0.2
+    p_5[1] <- p_b[6] * 0.2
+    
+    nm <- 1/sum(p_0[1],p_1[1],p_2[1],p_3[1],p_4[1],p_5[1])
+    
+    p_0[1] <- p_0[1] * nm
+    p_1[1] <- p_1[1] * nm
+    p_2[1] <- p_2[1] * nm
+    p_3[1] <- p_3[1] * nm
+    p_4[1] <- p_4[1] * nm
+    p_5[1] <- p_5[1] * nm
+  }
+  
+  #other iterations
+  for (i in c(2:N)){
+      if (res[i]==1) {
+    p_0[i] <- p_w[1] * p_0[i-1]
+    p_1[i] <- p_w[2] * p_1[i-1]
+    p_2[i] <- p_w[3] * p_2[i-1]
+    p_3[i] <- p_w[4] * p_3[i-1]
+    p_4[i] <- p_w[5] * p_4[i-1]
+    p_5[i] <- p_w[6] * p_5[i-1]
+    
+    nm <- 1/sum(p_0[i],p_1[i],p_2[i],p_3[i],p_4[i],p_5[i])
+    
+    p_0[i] <- p_0[i] * nm
+    p_1[i] <- p_1[i] * nm
+    p_2[i] <- p_2[i] * nm
+    p_3[i] <- p_3[i] * nm
+    p_4[i] <- p_4[i] * nm
+    p_5[i] <- p_5[i] * nm
+  }
+  
+    if (res[i]==0) {
+    p_0[i] <- p_b[1] * p_0[i-1]
+    p_1[i] <- p_b[2] * p_1[i-1]
+    p_2[i] <- p_b[3] * p_2[i-1]
+    p_3[i] <- p_b[4] * p_3[i-1]
+    p_4[i] <- p_b[5] * p_4[i-1]
+    p_5[i] <- p_b[6] * p_5[i-1]
+    
+    nm <- 1/sum(p_0[i],p_1[i],p_2[i],p_3[i],p_4[i],p_5[i])
+    
+    p_0[i] <- p_0[i] * nm
+    p_1[i] <- p_1[i] * nm
+    p_2[i] <- p_2[i] * nm
+    p_3[i] <- p_3[i] * nm
+    p_4[i] <- p_4[i] * nm
+    p_5[i] <- p_5[i] * nm
+  }
+    
+  }
+  
+  #create dataframe for plotting
+  res <- data.frame(try_num,res,p_0,p_1,p_2,p_3,p_4,p_5)
+  return(res)
+}
+```
+
+```{r}
+set.seed(12348)
+res <- extraction(100)
+#plotting
+pl_0 <- ggplot(res, aes(try_num,p_0)) + geom_point(size=0.8, color="#fd0363") + geom_line(lwd=0.8, color="#fd0363") + ylim(0,1) + labs(x="Iteration", y="Probability") + ggtitle("box 1")
+
+pl_1 <- ggplot(res, aes(try_num,p_1)) + geom_point(size=0.8, color="#cc095d") + geom_line(lwd=0.8, color="#cc095d") + ylim(0,1) + labs(x="Iteration", y="Probability") + ggtitle("box 2")
+
+pl_2 <- ggplot(res, aes(try_num,p_2)) + geom_point(size=0.8, color="#9c1057") + geom_line(lwd=0.8, color="#9c1057") + ylim(0,1) + labs(x="Iteration", y="Probability") + ggtitle("box 3")
+
+pl_3 <- ggplot(res, aes(try_num,p_3)) + geom_point(size=0.8, color="#6b1650") + geom_line(lwd=0.8, color="#6b1650") + ylim(0,1) + labs(x="Iteration", y="Probability") + ggtitle("box 4")
+
+pl_4 <- ggplot(res, aes(try_num,p_4)) + geom_point(size=0.8, color="#3b1d4a") + geom_line(lwd=0.8, color="#3b1d4a") + ylim(0,1) + labs(x="Iteration", y="Probability") + ggtitle("box 5")
+
+pl_5 <- ggplot(res, aes(try_num,p_5)) + geom_point(size=0.8, color="#0a2344") + geom_line(lwd=0.8, color="#0a2344") + ylim(0,1) + labs(x="Iteration", y="Probability") + ggtitle("box 6")
+
+(plot <- ggarrange(pl_0,pl_1,pl_2,pl_3,pl_4,pl_5, nrow=2, ncol=3, heights = c(1,1)))
+```
+
+For this seed box 4 is the most probable result
