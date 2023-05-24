@@ -1,0 +1,10 @@
+model {
+	# data likelihood
+	for (i in 1:length(X)) {
+		X[i] ~ dpois(p); 
+	}
+	# a uniform prior for p
+	p ~ dexp(0.00001);
+	# Predicted data , given p
+	Y ~ dpois(p); 
+}

@@ -1,0 +1,425 @@
+---
+title: "Barbiero_Lorenzo_rlab05"
+author: "Barbiero Lorenzo"
+date: "`r Sys.Date()`"
+output: 
+  prettydoc::html_pretty:
+        theme: cayman
+        highlight: github
+        math: katex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(rjags)
+```
+
+## Exercise 1
+
+Define and visualize data
+
+```{r}
+casecount <- seq(0,5)
+n1 <- c(109, 65, 22, 3, 1, 0)
+n2 <- c(144, 91, 32, 11, 2, 0 )
+meas <- data.frame(casecount,n1,n2)
+p1 <- ggplot(meas)+geom_bar(aes(casecount,n1), stat = "identity", color="white", fill="dodgerblue3")
+p2 <- ggplot(meas)+geom_bar(aes(casecount,n2), stat = "identity", color="white", fill="orangered")
+
+(p <- ggarrange(p1,p2,  nrow=1, ncol=2, heights = c(1,1)))
+```
+
+### Flat prior
+
+```{r}
+p <- seq(0,1,0.001)
+u.n1.post <- dgamma(p,sum(casecount*n1)+1,sum(n1))
+u.n1.meanval <- sum(u.n1.post*p*(p[2]-p[1]))
+u.n1.var <- sqrt(sum(u.n1.post*p*p*(p[2]-p[1]))-u.n1.meanval**2)
+u.n1.q <- c(qgamma(0.025,sum(casecount*n1)+1,sum(n1)),qgamma(0.975,sum(casecount*n1)+1,sum(n1)))
+
+u.n2.post <- dgamma(p,sum(casecount*n2)+1,sum(n2))
+u.n2.meanval <- sum(u.n2.post*p*(p[2]-p[1]))
+u.n2.var <- sqrt(sum(u.n2.post*p*p*(p[2]-p[1]))-u.n2.meanval**2)
+u.n2.q <- c(qgamma(0.025,sum(casecount*n2)+1,sum(n2)),qgamma(0.975,sum(casecount*n2)+1,sum(n2)))
+
+ex1 <- data.frame(p,u.n1.post,u.n2.post)
+
+quantities <- c("mean","median","variance","lower quantile","upper quantile")
+corp_1 <- c(u.n1.meanval,qgamma(0.5,sum(casecount*n1)+1,sum(n1)),u.n1.var,u.n1.q[1],u.n1.q[2])
+corp_2 <- c(u.n2.meanval,qgamma(0.5,sum(casecount*n2)+1,sum(n2)),u.n2.var,u.n2.q[1],u.n2.q[2])           
+
+
+p1<-ggplot(ex1[ex1$p>0.45&ex1$p<0.8,])+
+   geom_line(aes(p,u.n1.post),color="dodgerblue3", lwd=1)+
+    geom_area(data=ex1[ex1$p>u.n1.q[1]&ex1$p<u.n1.q[2],], mapping= aes(p,u.n1.post),fill="dodgerblue3",alpha=0.5)+
+    geom_vline(xintercept = u.n1.meanval, color="deeppink3",lwd=1,linetype="dashed")+
+    geom_vline(xintercept = qgamma(0.5,sum(casecount*n1)+1,sum(n1)), color="darkorange2",lwd=1,linetype="dotdash")+
+    labs(x = "lambda", y = "Corp 1")
+
+p2<-ggplot(ex1[ex1$p>0.55&ex1$p<0.9,])+
+   geom_line(aes(p,u.n2.post),color="orangered", lwd=1)+
+    geom_area(data=ex1[ex1$p>u.n2.q[1]&ex1$p<u.n2.q[2],], aes(p,u.n2.post),fill="orangered",alpha=0.5)+
+  geom_vline(xintercept = u.n2.meanval, color="navy",lwd=1,linetype="dashed")+
+   geom_vline(xintercept = qgamma(0.5,sum(casecount*n2)+1,sum(n2)), color="dodgerblue3",lwd=1,linetype="dotdash")+
+    labs(x = "lambda", y = "Corp 2")
+
+
+(p <- ggarrange(p1,p2, nrow=1, ncol=2, heights = c(1,1)))
+(summary <- data.frame(quantities,corp_1,corp_2))
+```
+
+### Jeffrey's Prior
+
+```{r}
+p <- seq(0,1,0.001)
+u.n1.post <- dgamma(p,sum(casecount*n1)+0.5,sum(n1))
+u.n1.meanval <- sum(u.n1.post*p*(p[2]-p[1]))
+u.n1.var <- sqrt(sum(u.n1.post*p*p*(p[2]-p[1]))-u.n1.meanval**2)
+u.n1.q <- c(qgamma(0.025,sum(casecount*n1)+1,sum(n1)),qgamma(0.975,sum(casecount*n1)+1,sum(n1)))
+
+u.n2.post <- dgamma(p,sum(casecount*n2)+0.5,sum(n2))
+u.n2.meanval <- sum(u.n2.post*p*(p[2]-p[1]))
+u.n2.var <- sqrt(sum(u.n2.post*p*p*(p[2]-p[1]))-u.n2.meanval**2)
+u.n2.q <- c(qgamma(0.025,sum(casecount*n2)+1,sum(n2)),qgamma(0.975,sum(casecount*n2)+1,sum(n2)))
+
+ex1 <- data.frame(p,u.n1.post,u.n2.post)
+
+quantities <- c("mean","median","variance","lower quantile","upper quantile")
+corp_1 <- c(u.n1.meanval,qgamma(0.5,sum(casecount*n1)+1,sum(n1)),u.n1.var,u.n1.q[1],u.n1.q[2])
+corp_2 <- c(u.n2.meanval,qgamma(0.5,sum(casecount*n2)+1,sum(n2)),u.n2.var,u.n2.q[1],u.n2.q[2])           
+
+
+p1<-ggplot(ex1[ex1$p>0.45&ex1$p<0.8,])+
+   geom_line(aes(p,u.n1.post),color="dodgerblue3", lwd=1)+
+    geom_area(data=ex1[ex1$p>u.n1.q[1]&ex1$p<u.n1.q[2],], mapping= aes(p,u.n1.post),fill="dodgerblue3",alpha=0.5)+
+    geom_vline(xintercept = u.n1.meanval, color="deeppink3",lwd=1,linetype="dashed")+
+    geom_vline(xintercept = qgamma(0.5,sum(casecount*n1)+1,sum(n1)), color="darkorange2",lwd=1,linetype="dotdash")+
+    labs(x = "lambda", y = "Corp 1")
+
+p2<-ggplot(ex1[ex1$p>0.55&ex1$p<0.9,])+
+   geom_line(aes(p,u.n2.post),color="orangered", lwd=1)+
+    geom_area(data=ex1[ex1$p>u.n2.q[1]&ex1$p<u.n2.q[2],], aes(p,u.n2.post),fill="orangered",alpha=0.5)+
+  geom_vline(xintercept = u.n2.meanval, color="navy",lwd=1,linetype="dashed")+
+   geom_vline(xintercept = qgamma(0.5,sum(casecount*n2)+1,sum(n2)), color="dodgerblue3",lwd=1,linetype="dotdash")+
+    labs(x = "lambda", y = "Corp 2")
+
+
+(p <- ggarrange(p1,p2, nrow=1, ncol=2, heights = c(1,1)))
+(summary <- data.frame(quantities,corp_1,corp_2))
+```
+The two priors produce extremely similar results
+
+## Exercise 2
+
+I will perform the following Poissonian MCMC analysis using JAGS.
+To avoid redundancy I will only analyse the first data set using a uniform prior.
+
+```{r}
+set.seed(28980)
+```
+
+Rewrite data
+
+```{r}
+data <- NULL
+data$X <- c(rep(0,109),rep(1,65),rep(2,22),rep(3,3),rep(4,1))
+```
+
+Make the model in BUGS (ex1.bug)
+
+````{verbatim}
+model {
+	# data likelihood
+	for (i in 1:length(X)) {
+		X[i] ~ dpois(p);
+	}
+	# a uniform prior for p
+	p ~ dexp(0.00001); #Jeffrey's prior could be inserted here
+	# Predicted data , given p
+	Y ~ dpois(p); 
+}
+````
+
+
+
+```{r}
+model <- "ex1.bug"
+jm <- jags.model(model, data)
+```
+
+```{r}
+update(jm, 1000) # Burn in
+```
+
+
+```{r}
+chain <- coda.samples(jm, c("p", "Y"), n.iter=10000)
+plot(chain, col="navy")
+```
+```{r}
+(summary(chain))
+```
+
+```{r}
+chain.df <- data.frame(as.mcmc(chain))
+p1 <- ggplot(chain.df) + geom_histogram(aes(p), binwidth = 0.01, fill = "darkolivegreen2", color="black") + labs(x="lambda",y="counts")
+p2 <- ggplot(chain.df) + geom_histogram(aes(Y,after_stat(density)), binwidth = 1, fill = "firebrick2", color="black") + labs(x="fraction",y="predicted counts")
+(p <- ggarrange(p1,p2,nrow=1, ncol=2, heights = c(1,1)))
+```
+
+#### Results and comparison
+
+comparing the results obtained between the traditional Inference and the JAGS MCMC
+
+```{r}
+entries <- c("mean","median","variance","upper quantile", "lower quantile")
+Standard <- c(u.n1.meanval,qgamma(0.5,sum(casecount*n1)+1,sum(n1)),u.n1.var,u.n1.q[1],u.n1.q[2])
+MCMC <- c(0.6139,0.6127,0.0557,0.5088,0.7281)
+
+p1<-ggplot(ex1[ex1$p>0.4 & ex1$p<0.85,])+
+   geom_line(aes(p,u.n1.post),color="dodgerblue3", lwd=1)+
+    geom_area(data=ex1[ex1$p>u.n1.q[1]&ex1$p<u.n1.q[2],], mapping= aes(p,u.n1.post),fill="dodgerblue3",alpha=0.5)+
+    geom_vline(xintercept = u.n1.meanval, color="deeppink3",lwd=1,linetype="dashed")+
+    geom_vline(xintercept = qgamma(0.5,sum(casecount*n1)+1,sum(n1)), color="darkorange2",lwd=1,linetype="dotdash")+
+    labs(x = "p", y = "Corp 1")
+
+p2 <- ggplot() + geom_histogram(data=chain.df, aes(p, after_stat(density)), binwidth = 0.01, fill = "dodgerblue2", color="ivory", alpha=0.5) + geom_histogram(data=chain.df[chain.df$p > 0.5122 & chain.df$p < 0.7261,], aes(p, after_stat(density)), binwidth = 0.01, fill = "dodgerblue2", color="ivory") + geom_vline(xintercept = 0.5976,color="deeppink3",lwd=1,linetype="dashed") + geom_vline(xintercept = 0.6127, color="darkorange2", lwd=1, linetype="dotdash") + labs(x="lambda",y="counts")
+
+(p <- ggarrange(p1,p2, nrow=1, ncol=2, heights = c(1,1)))
+(recap <- data.frame(entries,Standard,MCMC))
+```
+
+Results are really similar
+
+## Exercise 3
+
+### First data collection
+
+For N=116 and y=11 the frequentist estimator is
+
+```{r}
+N=116
+y=11
+mu <- y/N
+varmu <- y*(N-y)/N**2
+mu 
+varmu
+```
+
+The bayesian estimator is
+
+```{r}
+p <- seq(0,1,0.001)
+post_1 <- dbeta(p,1+11,10+105)
+ex22_1 <- data.frame(p,post_1)
+b.mean_1 <- sum(post_1*p*(p[2]-p[1]))
+b.var_1 <- sqrt(sum(post_1*p*p*(p[2]-p[1]))-b.mean_1**2)
+b.quant_1 <- c(qgamma(0.025,12,115),qgamma(0.975,12,115))
+
+quant <- c("Mean", "Variance", "Upper Quantile", "Lower Quantile")
+Posterior <- c(b.mean_1,b.var_1,b.quant_1[1],b.quant_1[2])
+
+(p<-ggplot(ex22_1[ex22_1$p<0.3,])+geom_line(aes(p,post_1), color="orangered", lwd=1)+
+    geom_area(data=ex22_1[ex22_1$p>b.quant_1[1]&ex22_1$p<b.quant_1[2],], aes(p,post_1),fill="orangered",alpha=0.5)+
+    geom_vline(xintercept = b.mean_1, color="navy",lwd=1,linetype="dashed"))
+
+(recap <- data.frame(quant,Posterior))
+```
+
+
+#### Hypothesis test
+
+Frequentist hypothesis test
+
+The distribution for the null hypothesis is a Bernoulli process with p=0.1
+
+```{r}
+n <- seq(0,116,1)
+bern <- dbinom(n,116,0.1)
+ex2 <- data.frame(n,bern)
+
+(p<-ggplot(ex2[ex2$n<30,])+geom_bar(aes(n,bern), stat = "identity", color="ivory", fill="navy"))
+```
+
+The closest result we can get to a 95%CI is
+
+```{r}
+x1 <- qbinom(0.025,116,0.1)
+x2 <- qbinom(0.975,116,0.1)
+x1
+x2
+```
+
+We will check with these boundaries
+
+```{r}
+(p<-ggplot(ex2[ex2$n<30,])+geom_bar(aes(n,bern), stat = "identity", color="white", fill="navy") +
+    geom_bar(data = ex2[ex2$n>5 & ex2$n<19,], aes(n,bern), stat = "identity", color="white", fill="forestgreen")
+  +geom_bar(data = ex2[ex2$n==11,], aes(n,bern), stat = "identity", color="forestgreen", fill="orangered"))
+```
+
+Bayesian HT
+
+```{r}
+(p<-ggplot(ex22_1[ex22_1$p<0.3,])+geom_line(aes(p,post_1), color="orangered", lwd=1)+
+    geom_area(data=ex22_1[ex22_1$p>b.quant_1[1]&ex22_1$p<b.quant_1[2],], aes(p,post_1),fill="orangered",alpha=0.5)+
+   geom_vline(xintercept = 0.1, color="lightslateblue",lwd=1,linetype="dashed"))
+```
+
+In both cases the null Hypothesis is accepted
+
+### Second data collection
+
+For N=165 and y=9 the frequentist estimator is
+
+```{r}
+N=165
+y=9
+mu <- y/N
+varmu <- y*(N-y)/N**2
+mu 
+varmu
+```
+
+The Bayesian estimator is:
+
+With a Beta(1,10) prior
+
+```{r}
+p <- seq(0,1,0.001)
+post <- dbeta(p,1+11,10+156)
+post2 <- dbeta(p,12+9,115+156)
+ex22 <- data.frame(p,post,post2)
+
+b.mean <- sum(post*p*(p[2]-p[1]))
+b.var <- sqrt(sum(post*p*p*(p[2]-p[1]))-b.mean**2)
+b.quant <- c(qgamma(0.025,12,166),qgamma(0.975,12,166))
+
+b.mean2 <- sum(post2*p*(p[2]-p[1]))
+b.var2 <- sqrt(sum(post2*p*p*(p[2]-p[1]))-b.mean2**2)
+b.quant2 <- c(qgamma(0.025,12+9,115+156),qgamma(0.975,12+9,115+156))
+
+quant <- c("Mean", "Variance", "Upper Quantile", "Lower Quantile")
+Posterior <- c(b.mean,b.var,b.quant[1],b.quant[2])
+
+(p<-ggplot(ex22[ex22$p<0.3,])+geom_line(aes(p,post), color="orangered", lwd=1)+
+    geom_area(data=ex22[ex22$p>b.quant[1]&ex22$p<b.quant[2],], aes(p,post),fill="orangered",alpha=0.5)+
+    geom_vline(xintercept = b.mean, color="navy",lwd=1,linetype="dashed"))
+
+(recap <- data.frame(quant,Posterior))
+```
+
+With the previous posterior as prior, so a Beta(12,115)
+
+```{r}
+quant <- c("Mean", "Variance", "Upper Quantile", "Lower Quantile")
+Posterior <- c(b.mean2,b.var2,b.quant2[1],b.quant2[2])
+
+(p<-ggplot(ex22[ex22$p<0.3,])+geom_line(aes(p,post2), color="lightslateblue", lwd=1)+
+    geom_area(data=ex22[ex22$p>b.quant2[1]&ex22$p<b.quant2[2],], aes(p,post2),fill="lightslateblue",alpha=0.5)+
+ geom_vline(xintercept = b.mean2, color="navy",lwd=1,linetype="dashed"))
+
+(recap <- data.frame(quant,Posterior))
+```
+
+#### Hypothesis test
+
+Frequentist hypothesis test
+
+Same procedure as before but with different measurement
+
+```{r}
+n <- seq(0,165,1)
+bern <- dbinom(n,165,0.1)
+ex2 <- data.frame(n,bern)
+x1 <- qbinom(0.025,165,0.1)
+x2 <- qbinom(0.975,165,0.1)
+x1
+x2
+```
+
+
+```{r}
+(p<-ggplot(ex2[ex2$n<35,])+geom_bar(aes(n,bern), stat = "identity", color="white", fill="navy") +
+    geom_bar(data = ex2[ex2$n>8 & ex2$n<25,], aes(n,bern), stat = "identity", color="white", fill="forestgreen")
+  +geom_bar(data = ex2[ex2$n==9,], aes(n,bern), stat = "identity", color="forestgreen", fill="orangered"))
+```
+
+Bayesian HT
+
+```{r}
+(p<-ggplot(ex22[ex22$p<0.3,])+geom_line(aes(p,post), color="orangered", lwd=1)+
+    geom_vline(xintercept = 0.1, color="firebrick",lwd=1,linetype="dashed")+
+    geom_area(data=ex22[ex22$p>b.quant[1]&ex22$p<b.quant[2],], aes(p,post),fill="orangered",alpha=0.5))
+```
+
+In both cases the null hypothesis is accepted
+
+## Exercise 4
+
+This is a case of Bernoulli MCMC
+
+```{r}
+data2 <- NULL
+data2$X <- c(rep(1,11),rep(0,105))
+data2$n_next <- 10
+```
+
+Define the model with BUGS (ex2.bug)
+
+````{verbatim}
+model {
+	# data likelihood
+	for (i in 1:length(X)) {
+		X[i] ~ dbern(p); 
+	}
+	# beta (1,10) prior for p
+	p ~ dbeta(1, 10);
+	# Predicted data , given p
+	y ~ dbin(p, n_next); 
+}
+````
+
+```{r}
+model2 <- "ex2.bug"
+jm2 <- jags.model(model2, data2)
+```
+
+```{r}
+update(jm2, 1000)
+```
+
+
+```{r}
+chain2 <- coda.samples(jm2, c("p", "y"), n.iter=10000)
+plot(chain2, col="navy")
+```
+
+```{r}
+(summary(chain2))
+```
+
+#### Results and comparison
+
+```{r}
+chain2.df <- data.frame( as.mcmc(chain2) )
+quant <- c("Mean", "Variance", "Upper Quantile", "Lower Quantile")
+Standard <- c(b.mean_1,b.var_1,b.quant_1[1],b.quant_1[2])
+MCMC <- c(0.09488,0.02609,0.04978,0.1506)
+
+p1<-ggplot(ex22_1[ex22_1$p<0.22,])+geom_line(aes(p,post_1), color="orangered", lwd=1)+
+    geom_area(data=ex22_1[ex22_1$p>b.quant_1[1]&ex22$p<b.quant_1[2],], aes(p,post_1),fill="orangered",alpha=0.5) + geom_vline(xintercept = b.mean_1, color="navy",lwd=1,linetype="dashed")
+
+p2<-ggplot(chain2.df)+geom_histogram(aes(p,after_stat(density)), binwidth=0.007, fill="orangered", color="ivory", alpha=0.5)+geom_histogram(data=chain2.df[chain2.df>0.04978 & chain2.df<0.1506,], aes(p,after_stat(density)), binwidth=0.007, fill="orangered", color="ivory") + geom_vline(xintercept = 0.09488, color="navy",lwd=1,linetype="dashed")
+
+(p <- ggarrange(p1,p2, nrow=1, ncol=2, heights = c(1,1)))
+(recap <- data.frame(quant,Standard,MCMC))
+```
+
+Also in this case the MCMC provides similar results to the traditional analysis
